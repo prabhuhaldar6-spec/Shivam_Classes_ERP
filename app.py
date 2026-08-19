@@ -2,8 +2,7 @@ import streamlit as st
 from utils.supabase_client import supabase
 from utils.branding import show_header
 
-st.set_page_config(page_title="Shivam Classes ERP", page_icon="utils/logo.jpg")
-
+st.set_page_config(page_title="Shivam Classes ERP", page_icon="logo app.jpg", layout="wide")
 # Keep track of who is logged in across page switches
 if "user" not in st.session_state:
     st.session_state.user = None
