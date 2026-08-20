@@ -53,7 +53,17 @@ with tab1:
                 .execute()
             )
             student_id = new_student.data[0]["id"]
-            st.success(f"Added {full_name}")
+
+            result = {
+                "full_name": full_name,
+                "student_id": student_id,
+                "total_fee": total_fee,
+                "amount_paid_now": amount_paid_now,
+                "payment_month": payment_month,
+                "pdf_path": None,
+                "receipt_no": None,
+                "remaining_val": None,
+            }
 
             # 2. If any amount was paid at registration, record it and generate a receipt
             if amount_paid_now > 0:
@@ -80,17 +90,29 @@ with tab1:
                     total_fee=total_fee,
                     remaining=remaining_val,
                 )
-                st.info(f"Remaining balance for {full_name}: Rs. {remaining_val}")
-                with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        "Download Registration Receipt PDF",
-                        f,
-                        file_name=f"receipt_{receipt_no}.pdf",
-                    )
-                st.caption(
-                    "Note: this student isn't linked to Telegram yet, so the receipt "
-                    "wasn't auto-sent — link them in 'Link Telegram' to enable that for next time."
+                result["pdf_path"] = pdf_path
+                result["receipt_no"] = receipt_no
+                result["remaining_val"] = remaining_val
+
+            st.session_state["last_added_student"] = result
+
+    # Everything below runs OUTSIDE the form — download_button isn't allowed inside one
+    last = st.session_state.get("last_added_student")
+    if last:
+        st.success(f"Added {last['full_name']}")
+        if last["pdf_path"]:
+            st.info(f"Remaining balance for {last['full_name']}: Rs. {last['remaining_val']}")
+            with open(last["pdf_path"], "rb") as f:
+                st.download_button(
+                    "Download Registration Receipt PDF",
+                    f,
+                    file_name=f"receipt_{last['receipt_no']}.pdf",
+                    key="download_last_receipt",
                 )
+            st.caption(
+                "Note: this student isn't linked to Telegram yet, so the receipt "
+                "wasn't auto-sent — link them in 'Link Telegram' to enable that for next time."
+            )
 
 # --- All Students ---
 with tab2:
