@@ -257,17 +257,11 @@ with tab5:
                     total_fee=total_fee_val,
                     remaining=remaining_val,
                 )
-                st.success(f"Receipt #{receipt_no} generated.")
-                if remaining_val is not None:
-                    st.info(f"Remaining balance for {chosen_name}: Rs. {remaining_val}")
-
-                with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        "Download Receipt PDF", f, file_name=f"receipt_{receipt_no}.pdf"
-                    )
 
                 # 4. Send it on Telegram if this student has a linked chat_id
                 chat_id = student.get("telegram_chat_id")
+                telegram_sent = False
+                telegram_error = None
                 if chat_id:
                     try:
                         telegram.send_document(
@@ -275,14 +269,46 @@ with tab5:
                             pdf_path,
                             caption=f"Fee receipt for {chosen_name} — {month} — Rs. {amount}",
                         )
-                        st.success("Receipt sent on Telegram too.")
+                        telegram_sent = True
                     except Exception as e:
-                        st.warning(f"Saved, but could not send on Telegram: {e}")
+                        telegram_error = str(e)
+
+                st.session_state["last_fee_record"] = {
+                    "chosen_name": chosen_name,
+                    "receipt_no": receipt_no,
+                    "pdf_path": pdf_path,
+                    "remaining_val": remaining_val,
+                    "chat_id": chat_id,
+                    "telegram_sent": telegram_sent,
+                    "telegram_error": telegram_error,
+                }
+
+        # Everything below runs OUTSIDE the form — download_button isn't allowed inside one
+        last_fee = st.session_state.get("last_fee_record")
+        if last_fee:
+            st.success(f"Receipt #{last_fee['receipt_no']} generated.")
+            if last_fee["remaining_val"] is not None:
+                st.info(
+                    f"Remaining balance for {last_fee['chosen_name']}: "
+                    f"Rs. {last_fee['remaining_val']}"
+                )
+            with open(last_fee["pdf_path"], "rb") as f:
+                st.download_button(
+                    "Download Receipt PDF",
+                    f,
+                    file_name=f"receipt_{last_fee['receipt_no']}.pdf",
+                    key="download_last_fee_receipt",
+                )
+            if last_fee["chat_id"]:
+                if last_fee["telegram_sent"]:
+                    st.success("Receipt sent on Telegram too.")
                 else:
-                    st.info(
-                        f"{chosen_name} isn't linked to Telegram yet — "
-                        "link them in the 'Link Telegram' tab to auto-send receipts."
-                    )
+                    st.warning(f"Saved, but could not send on Telegram: {last_fee['telegram_error']}")
+            else:
+                st.info(
+                    f"{last_fee['chosen_name']} isn't linked to Telegram yet — "
+                    "link them in the 'Link Telegram' tab to auto-send receipts."
+                )
     else:
         st.info("Add students first before recording fees.")
 
