@@ -13,6 +13,7 @@ Go to your Supabase project → **SQL Editor** → paste this → **Run**.
 > alter table attendance add column class text;
 > alter table homework add column class text;
 > alter table students add column telegram_chat_id text;
+> alter table students add column total_fee numeric default 0;
 > ```
 
 ```sql
@@ -27,7 +28,8 @@ create table students (
   full_name text,
   class text,
   parent_id uuid references profiles(id),
-  telegram_chat_id text
+  telegram_chat_id text,
+  total_fee numeric default 0
 );
 
 create table attendance (
