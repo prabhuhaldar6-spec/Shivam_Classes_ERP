@@ -119,6 +119,31 @@ with tab2:
     students = supabase.table("students").select("*").execute()
     st.dataframe(students.data)
 
+    if students.data:
+        st.divider()
+        st.subheader("Delete a student")
+        delete_names = {s["full_name"]: s for s in students.data}
+        chosen_delete_name = st.selectbox(
+            "Select student to delete", list(delete_names.keys()), key="delete_student_pick"
+        )
+        confirm_delete_student = st.checkbox(
+            f"I confirm I want to permanently delete {chosen_delete_name} "
+            "and all their attendance/fee records",
+            key="confirm_delete_student",
+        )
+        if st.button("Delete Student", key="delete_student_btn"):
+            if confirm_delete_student:
+                student_to_delete = delete_names[chosen_delete_name]
+                sid = student_to_delete["id"]
+                # Clean up related records first (foreign key references)
+                supabase.table("fees").delete().eq("student_id", sid).execute()
+                supabase.table("attendance").delete().eq("student_id", sid).execute()
+                supabase.table("students").delete().eq("id", sid).execute()
+                st.success(f"Deleted {chosen_delete_name} and their related records.")
+                st.rerun()
+            else:
+                st.warning("Please check the confirmation box first.")
+
 # --- Add Teacher / Parent (creates a real login, no need to touch Supabase) ---
 with tab3:
     st.write("Create a login for a teacher or parent. They'll use this email/password to sign in.")
@@ -158,6 +183,32 @@ with tab4:
         .execute()
     )
     st.dataframe(profiles.data)
+
+    if profiles.data:
+        st.divider()
+        st.subheader("Remove a teacher or parent login")
+        delete_staff = {p["full_name"]: p for p in profiles.data}
+        chosen_delete_staff = st.selectbox(
+            "Select person to remove", list(delete_staff.keys()), key="delete_staff_pick"
+        )
+        confirm_delete_staff = st.checkbox(
+            f"I confirm I want to permanently remove {chosen_delete_staff}'s login",
+            key="confirm_delete_staff",
+        )
+        if st.button("Delete Login", key="delete_staff_btn"):
+            if confirm_delete_staff:
+                staff_to_delete = delete_staff[chosen_delete_staff]
+                try:
+                    supabase_admin.auth.admin.delete_user(staff_to_delete["id"])
+                    supabase_admin.table("profiles").delete().eq(
+                        "id", staff_to_delete["id"]
+                    ).execute()
+                    st.success(f"Removed {chosen_delete_staff}'s login.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Could not remove login: {e}")
+            else:
+                st.warning("Please check the confirmation box first.")
 
 # --- Fees & Receipts ---
 with tab5:
