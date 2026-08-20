@@ -42,16 +42,47 @@ with tab1:
             "This payment is for (e.g. 'Registration' or 'August 2026')",
             value="Registration",
         )
+        st.divider()
+        st.caption("Optional: create a login so this student can sign in to the app.")
+        student_phone = st.text_input(
+            "Mobile Number (for login)", placeholder="+91XXXXXXXXXX (include country code)"
+        )
+        student_password = st.text_input("Password for student login", type="password")
         submitted = st.form_submit_button("Add Student")
         if submitted:
-            # 1. Create the student record
-            new_student = (
-                supabase.table("students")
-                .insert(
-                    {"full_name": full_name, "class": student_class, "total_fee": total_fee}
-                )
-                .execute()
-            )
+            # 1. If a mobile number was given, create the login first
+            new_profile_id = None
+            login_error = None
+            if student_phone:
+                try:
+                    auth_result = supabase_admin.auth.admin.create_user(
+                        {
+                            "phone": student_phone,
+                            "password": student_password,
+                            "phone_confirm": True,  # skip SMS OTP verification
+                        }
+                    )
+                    new_profile_id = auth_result.user.id
+                    supabase_admin.table("profiles").insert(
+                        {
+                            "id": new_profile_id,
+                            "full_name": full_name,
+                            "role": "student",
+                        }
+                    ).execute()
+                except Exception as e:
+                    login_error = str(e)
+
+            # 2. Create the student record (linked to the login, if one was made)
+            student_row = {
+                "full_name": full_name,
+                "class": student_class,
+                "total_fee": total_fee,
+            }
+            if new_profile_id:
+                student_row["profile_id"] = new_profile_id
+
+            new_student = supabase.table("students").insert(student_row).execute()
             student_id = new_student.data[0]["id"]
 
             result = {
@@ -63,9 +94,11 @@ with tab1:
                 "pdf_path": None,
                 "receipt_no": None,
                 "remaining_val": None,
+                "login_created": new_profile_id is not None,
+                "login_error": login_error,
             }
 
-            # 2. If any amount was paid at registration, record it and generate a receipt
+            # 3. If any amount was paid at registration, record it and generate a receipt
             if amount_paid_now > 0:
                 fee_row = (
                     supabase.table("fees")
@@ -100,6 +133,10 @@ with tab1:
     last = st.session_state.get("last_added_student")
     if last:
         st.success(f"Added {last['full_name']}")
+        if last.get("login_created"):
+            st.success(f"Login created — {last['full_name']} can now sign in with their mobile number.")
+        elif last.get("login_error"):
+            st.warning(f"Student added, but login creation failed: {last['login_error']}")
         if last["pdf_path"]:
             st.info(f"Remaining balance for {last['full_name']}: Rs. {last['remaining_val']}")
             with open(last["pdf_path"], "rb") as f:
@@ -121,6 +158,43 @@ with tab2:
 
     if students.data:
         st.divider()
+        st.subheader("Create a login for an existing student")
+        no_login_students = {
+            s["full_name"]: s for s in students.data if not s.get("profile_id")
+        }
+        if no_login_students:
+            with st.form("create_existing_login"):
+                pick_name = st.selectbox("Student", list(no_login_students.keys()))
+                pick_phone = st.text_input(
+                    "Mobile Number", placeholder="+91XXXXXXXXXX (include country code)"
+                )
+                pick_password = st.text_input("Password", type="password")
+                create_login_submitted = st.form_submit_button("Create Login")
+                if create_login_submitted:
+                    try:
+                        student_record = no_login_students[pick_name]
+                        auth_result = supabase_admin.auth.admin.create_user(
+                            {
+                                "phone": pick_phone,
+                                "password": pick_password,
+                                "phone_confirm": True,
+                            }
+                        )
+                        new_pid = auth_result.user.id
+                        supabase_admin.table("profiles").insert(
+                            {"id": new_pid, "full_name": pick_name, "role": "student"}
+                        ).execute()
+                        supabase.table("students").update(
+                            {"profile_id": new_pid}
+                        ).eq("id", student_record["id"]).execute()
+                        st.success(f"Login created for {pick_name}.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Could not create login: {e}")
+        else:
+            st.info("Every student already has a login.")
+
+        st.divider()
         st.subheader("Delete a student")
         delete_names = {s["full_name"]: s for s in students.data}
         chosen_delete_name = st.selectbox(
@@ -135,10 +209,20 @@ with tab2:
             if confirm_delete_student:
                 student_to_delete = delete_names[chosen_delete_name]
                 sid = student_to_delete["id"]
+                profile_id_to_delete = student_to_delete.get("profile_id")
                 # Clean up related records first (foreign key references)
                 supabase.table("fees").delete().eq("student_id", sid).execute()
                 supabase.table("attendance").delete().eq("student_id", sid).execute()
                 supabase.table("students").delete().eq("id", sid).execute()
+                # Also remove their login, if they had one
+                if profile_id_to_delete:
+                    try:
+                        supabase_admin.auth.admin.delete_user(profile_id_to_delete)
+                        supabase_admin.table("profiles").delete().eq(
+                            "id", profile_id_to_delete
+                        ).execute()
+                    except Exception:
+                        pass  # student record is already gone either way
                 st.success(f"Deleted {chosen_delete_name} and their related records.")
                 st.rerun()
             else:
