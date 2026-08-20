@@ -8,10 +8,11 @@ alongside this file.
 
 Go to your Supabase project → **SQL Editor** → paste this → **Run**.
 
-> Already ran this before? Just run these two lines instead, to add the new `class` columns:
+> Already ran this before? Just run these lines instead, to add the new columns:
 > ```sql
 > alter table attendance add column class text;
 > alter table homework add column class text;
+> alter table students add column telegram_chat_id text;
 > ```
 
 ```sql
@@ -25,7 +26,8 @@ create table students (
   id bigint generated always as identity primary key,
   full_name text,
   class text,
-  parent_id uuid references profiles(id)
+  parent_id uuid references profiles(id),
+  telegram_chat_id text
 );
 
 create table attendance (
@@ -64,12 +66,20 @@ Supabase dashboard → **Authentication** → Add user → enter your own email/
 Then in **Table Editor → profiles**, add a row with that same user's `id`,
 your name, and `role = admin`.
 
-## 4. Fill in secrets.toml
+## 4. Create a Telegram bot (for fee receipts and reminders)
+
+1. Open Telegram, search for **@BotFather**, and start a chat with it.
+2. Send `/newbot`, give it a name (e.g. "Shivam Classes ERP"), and a username ending in `bot` (e.g. `shivam_classes_erp_bot`).
+3. BotFather replies with a **token** — copy it, you'll paste it into `secrets.toml`.
+4. Tell your parents/students: search for your bot's username on Telegram, open a chat, and send `/start`. This is required once — Telegram only allows a bot to message someone who has messaged it first.
+5. In the app's Admin Dashboard, use the "Link Telegram" tab to match each `/start` message to the right student.
+
+## 5. Fill in secrets.toml
 
 Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and paste in
 your Supabase URL and anon key (Project Settings → API).
 
-## 5. Run it
+## 6. Run it
 
 ```
 pip install -r requirements.txt
